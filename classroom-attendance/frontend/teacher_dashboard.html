@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Teacher Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script type="module">
+    import {
+      initializeApp
+    } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      getDocs,
+      doc,
+      getDoc,
+      updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCDXcADOtCyyCeG1pIzj95l65KeJg79yWs",
+      authDomain: "face-attendance-system-b5a5b.firebaseapp.com",
+      projectId: "face-attendance-system-b5a5b",
+      storageBucket: "face-attendance-system-b5a5b.appspot.com",
+      messagingSenderId: "204947835687",
+      appId: "1:204947835687:web:0cb6f094a2ca62e0703702"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const periods = [
+      { period: 1, time: "9:10 – 10:00" },
+      { period: 2, time: "10:00 – 10:50" },
+      { period: 3, time: "10:50 – 11:40" },
+      { period: 4, time: "11:50 – 12:30" },
+      { period: 5, time: "12:30 – 1:30" },
+      { period: 6, time: "2:20 – 4:00" }
+    ];
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const teacherNameEl = document.getElementById("teacherName");
+      const attendanceTable = document.getElementById("attendanceBody");
+      const dateInput = document.getElementById("attendanceDate");
+
+      dateInput.value = new Date().toISOString().split("T")[0];
+      dateInput.addEventListener("change", loadAttendance);
+
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          teacherNameEl.textContent = user.displayName || user.email;
+          loadAttendance();
+        } else {
+          window.location.href = "login.html";
+        }
+      });
+
+      async function loadAttendance() {
+        attendanceTable.innerHTML = "";
+        const selectedDate = dateInput.value;
+
+        const usersSnapshot = await getDocs(collection(db, "users"));
+        for (const userDoc of usersSnapshot.docs) {
+          const userData = userDoc.data();
+          if (userData.isTeacher) continue; // 🔥 FIX: skip teacher records
+
+          for (const p of periods) {
+            const key = `${selectedDate}_Period ${p.period}`;
+            const status = userData.attendance?.[key] === "Present" ? "Present" : "Absent";
+
+            attendanceTable.innerHTML += `
+              <tr>
+                <td class="border p-2">${userData.name}</td>
+                <td class="border p-2">${userData.registerNumber}</td>
+                <td class="border p-2">${p.period} (${p.time})</td>
+                <td class="border p-2 ${status === "Present" ? "text-green-600" : "text-red-600"}">${status}</td>
+                <td class="border p-2">
+                  <button class="bg-green-500 text-white px-2 py-1 rounded text-sm" onclick="markAttendance('${userDoc.id}', '${key}', 'Present')">Present</button>
+                  <button class="bg-red-500 text-white px-2 py-1 rounded text-sm ml-2" onclick="markAttendance('${userDoc.id}', '${key}', 'Absent')">Absent</button>
+                </td>
+              </tr>`;
+          }
+        }
+      }
+
+      window.markAttendance = async function (uid, key, status) {
+        const userRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          const newAttendance = { ...(data.attendance || {}), [key]: status };
+          await updateDoc(userRef, { attendance: newAttendance });
+          loadAttendance();
+        }
+      };
+    });
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto p-6">
+    <h1 class="text-3xl font-bold text-indigo-700 mb-6">Welcome, <span id="teacherName">Teacher</span></h1>
+
+    <!-- Date Selector -->
+    <div class="mb-4 flex items-center gap-3">
+      <label class="font-semibold text-lg">Select Date:</label>
+      <input type="date" id="attendanceDate" class="border p-2 rounded" />
+    </div>
+
+    <!-- Attendance Table -->
+    <div class="bg-white shadow-lg rounded-2xl p-6 overflow-x-auto">
+      <h2 class="text-xl font-semibold mb-4">Student Attendance</h2>
+      <table class="min-w-full table-auto border-collapse text-sm text-left">
+        <thead class="bg-indigo-100 text-indigo-800">
+          <tr>
+            <th class="border p-2">Name</th>
+            <th class="border p-2">Reg. Number</th>
+            <th class="border p-2">Period</th>
+            <th class="border p-2">Status</th>
+            <th class="border p-2">Action</th>
+          </tr>
+        </thead>
+        <tbody id="attendanceBody">
+          <!-- Filled dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
